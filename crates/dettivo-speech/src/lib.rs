@@ -63,6 +63,22 @@ pub struct RecognizeRequest {
     pub timestamps: bool,
 }
 
+/// The vocabulary prompt for `words`, or `None` when there are none.
+///
+/// The list ends with a full stop: Whisper continues an unterminated list
+/// in whatever language it guesses, which can override the spoken and even
+/// the forced language. A word already ending in `.`, `!` or `?` closes it.
+pub fn vocabulary_prompt(words: &[String]) -> Option<String> {
+    let mut prompt = words.join(", ");
+    if prompt.is_empty() {
+        return None;
+    }
+    if !prompt.ends_with(['.', '!', '?']) {
+        prompt.push('.');
+    }
+    Some(prompt)
+}
+
 /// Why an engine call failed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EngineError {
@@ -160,5 +176,36 @@ mod tests {
     #[test]
     fn upstream_edges_resolve() {
         assert_eq!(super::UPSTREAM, &["dettivo-proto", "dettivo-engine-proto"]);
+    }
+
+    fn words(w: &[&str]) -> Vec<String> {
+        w.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn vocabulary_prompt_closes_the_list_with_a_full_stop() {
+        assert_eq!(super::vocabulary_prompt(&[]), None);
+        assert_eq!(
+            super::vocabulary_prompt(&words(&["Dettivo", "Astra", "Hyprland"])).as_deref(),
+            Some("Dettivo, Astra, Hyprland.")
+        );
+        assert_eq!(
+            super::vocabulary_prompt(&words(&["Omarchy"])).as_deref(),
+            Some("Omarchy.")
+        );
+    }
+
+    #[test]
+    fn vocabulary_prompt_adds_no_second_mark() {
+        for (last, prompt) in [
+            ("Acme Inc.", "Hyprland, Acme Inc."),
+            ("Yahoo!", "Hyprland, Yahoo!"),
+            ("Why?", "Hyprland, Why?"),
+        ] {
+            assert_eq!(
+                super::vocabulary_prompt(&words(&["Hyprland", last])).as_deref(),
+                Some(prompt)
+            );
+        }
     }
 }
